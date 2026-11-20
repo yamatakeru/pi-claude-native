@@ -41,12 +41,12 @@
     "@earendil-works/pi-coding-agent": "*"
   },
   "allowScripts": {
-    "@google/genai@2.21.0": true,
+    "@google/genai@2.32.0": true,
     "protobufjs@7.6.6": true
   },
   "devDependencies": {
-    "@earendil-works/pi-ai": "1.5.0",
-    "@earendil-works/pi-coding-agent": "1.5.0",
+    "@earendil-works/pi-ai": "1.6.0",
+    "@earendil-works/pi-coding-agent": "1.6.0",
     "typescript": "^5.9.3"
   },
   "scripts": {

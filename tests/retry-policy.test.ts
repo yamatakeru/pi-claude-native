@@ -1,7 +1,7 @@
 /**
- * Which failures after the request was sent Pi retries (#100), and how long
- * the relay waits for each resolved address (#101). Pi decides from the
- * error text alone, so these tests run the text the provider actually emits
+ * Which failures after the request was sent Pi retries (#100, #106), and
+ * how long the relay waits for each resolved address (#101). Pi decides from
+ * the error text alone, so these tests run the text the provider actually emits
  * through Pi's own classifier. Upstreams are loopback HTTP fixtures.
  */
 import assert from "node:assert/strict";
@@ -78,7 +78,7 @@ test("#100 Pi retries Claude Code's own timeout", () => {
   }
 });
 
-test("#100 Pi does not retry a reset after the request was sent", async (t) => {
+test("#106 Pi retries a reset after the request was sent", async (t) => {
   // Reads the request, then drops the connection without a response.
   const reset = createServer((req) => req.socket.destroy());
   t.after(() => reset.close());
@@ -87,7 +87,11 @@ test("#100 Pi does not retry a reset after the request was sent", async (t) => {
 
   assert.notEqual(relay.failure?.phase, "connect");
   assert.equal(relay.unsentFailure, false);
-  assert.equal(isRetryableAssistantError(failed(text)), false, text);
+  assert.equal(text.includes(UNSENT_FAILURE_NOTE), false);
+  // Pi decides retries for every provider (ADR 0004). From Pi 1.6.0 its
+  // classifier retries the bare socket code, as it retries the same drop
+  // from its own Anthropic provider.
+  assert.equal(isRetryableAssistantError(failed(text)), true, text);
 });
 
 test("#101 the relay waits 2 s for each resolved address", () => {

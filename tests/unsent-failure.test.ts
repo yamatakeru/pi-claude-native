@@ -107,13 +107,15 @@ test("every address counts, including those past the diagnostic's cap", () => {
 });
 
 test("Pi retries the note and does not read it as context overflow", () => {
-  const observed =
+  // Pi 1.6.0 also retries codes such as ETIMEDOUT by themselves (#106). For
+  // codes it does not list, and on earlier Pi, the note makes the retry.
+  const unsent =
     "Incomplete upstream response: first upstream attempt: status unknown, capture incomplete, " +
-    "relay failure AggregateError ETIMEDOUT during connect " +
-    "[ETIMEDOUT connect 192.0.2.1:443; EHOSTUNREACH connect [2001:db8::1]:443], native retries denied: 0";
-  // Without the note, Pi treats the observed failure as permanent.
-  assert.equal(isRetryableAssistantError(failed(observed)), false);
-  const noted = failed(observed + UNSENT_FAILURE_NOTE);
+    "relay failure AggregateError EHOSTUNREACH during connect " +
+    "[EHOSTUNREACH connect 192.0.2.1:443; ENETUNREACH connect [2001:db8::1]:443], native retries denied: 0";
+  // Without the note, Pi treats this failure as permanent.
+  assert.equal(isRetryableAssistantError(failed(unsent)), false);
+  const noted = failed(unsent + UNSENT_FAILURE_NOTE);
   assert.equal(isRetryableAssistantError(noted), true);
   assert.equal(isContextOverflow(noted), false);
 });
