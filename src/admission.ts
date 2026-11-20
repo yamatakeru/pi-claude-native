@@ -282,16 +282,27 @@ function failureCause(error: unknown): RelayFailureCause {
   };
 }
 
-/** Describe a relay failure without request or response content. */
-function describeRelayFailure(error: unknown, phase: RelayFailurePhase): RelayFailure {
+/**
+ * Describe a relay failure without request or response content. Whether it
+ * is an unsent failure is judged from every inner error, before the record
+ * keeps only the first MAX_FAILURE_CAUSES.
+ */
+export function describeRelayFailure(
+  error: unknown,
+  phase: RelayFailurePhase,
+): { failure: RelayFailure; unsent: boolean } {
   const inner =
     error instanceof AggregateError && Array.isArray(error.errors) ? error.errors : [];
-  return {
+  const full: RelayFailure = {
     name: error instanceof Error ? bounded(error.name) ?? "Error" : typeof error,
     phase,
     message: error instanceof RelayError ? error.message : null,
     ...failureCause(error),
-    causes: inner.slice(0, MAX_FAILURE_CAUSES).map(failureCause),
+    causes: inner.map(failureCause),
+  };
+  return {
+    failure: { ...full, causes: full.causes.slice(0, MAX_FAILURE_CAUSES) },
+    unsent: isUnsentFailure(full),
   };
 }
 
@@ -313,7 +324,7 @@ const TRANSIENT_CONNECT_CODES = new Set([
  * True for an unsent failure: a transient error while connecting, before any
  * request bytes reached upstream. TLS, configuration, unknown and local
  * errors are excluded, and an `AggregateError` counts only when every address
- * failed transiently.
+ * failed transiently. Pass the failure before its causes are capped.
  */
 export function isUnsentFailure(failure: RelayFailure): boolean {
   if (failure.phase !== "connect") return false;
@@ -366,6 +377,8 @@ export class AdmissionRelay {
   requestId: string | null = null;
   /** First relay failure, if any; later failures do not replace it. */
   failure: RelayFailure | null = null;
+  /** Whether `failure` is an unsent failure, judged from all its inner errors. */
+  unsentFailure = false;
   capture = new SseCapture();
   errorBody = Buffer.alloc(0);
   /** Fired when the admitted upstream response headers arrive. */
@@ -486,7 +499,10 @@ export class AdmissionRelay {
   }
 
   private recordFailure(error: unknown): void {
-    this.failure ??= describeRelayFailure(error, this.phase);
+    if (this.failure) return;
+    const { failure, unsent } = describeRelayFailure(error, this.phase);
+    this.failure = failure;
+    this.unsentFailure = unsent;
   }
 
   private track(socket: Socket): void {
@@ -516,6 +532,7 @@ export class AdmissionRelay {
     this.status = null;
     this.requestId = null;
     this.failure = null;
+    this.unsentFailure = false;
     this.capture = new SseCapture();
     this.errorBody = Buffer.alloc(0);
     this.phase = "request-body";

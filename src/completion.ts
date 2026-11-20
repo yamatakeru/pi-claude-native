@@ -18,7 +18,7 @@ import type {
   Model,
   ToolCall,
 } from "@earendil-works/pi-ai/compat";
-import { formatRelayFailure, isUnsentFailure, type AdmissionRelay } from "./admission.js";
+import { formatRelayFailure, type AdmissionRelay } from "./admission.js";
 import { enforceUsageCredits, usageCreditsRejectionError } from "./billing.js";
 import {
   ClaudeNativeError,
@@ -114,7 +114,7 @@ export function gateResponse(options: {
         (relay.errorText() ? `, upstream said: ${relay.errorText().slice(0, 500)}` : "") +
         (nativeErrorText ? `: ${nativeErrorText}` : "") +
         (results.length !== 1 ? `; native result lines: ${results.length}${childDetail}` : "") +
-        (relay.failure && isUnsentFailure(relay.failure) ? UNSENT_FAILURE_NOTE : ""),
+        (relay.unsentFailure ? UNSENT_FAILURE_NOTE : ""),
     );
   }
   const result = results[0];

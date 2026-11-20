@@ -12,7 +12,13 @@ import {
   type AssistantMessage,
   type TranscriptContext,
 } from "@earendil-works/pi-ai/compat";
-import { AdmissionRelay, isUnsentFailure, type RelayFailure, type RelayFailurePhase } from "../src/admission.ts";
+import {
+  AdmissionRelay,
+  describeRelayFailure,
+  isUnsentFailure,
+  type RelayFailure,
+  type RelayFailurePhase,
+} from "../src/admission.ts";
 import { UNSENT_FAILURE_NOTE } from "../src/completion.ts";
 import { errorMessage, resultLine, runNative } from "./support/native.ts";
 
@@ -78,6 +84,26 @@ test("only transient connect-phase errors are unsent failures", () => {
     ].map((message): [string, RelayFailure] => [message, failure("connect", null, { name: "RelayError", message })]),
   ];
   for (const [name, item] of sent) assert.equal(isUnsentFailure(item), false, name);
+});
+
+test("every address counts, including those past the diagnostic's cap", () => {
+  const refused = (address: string) => Object.assign(new Error("refused"), { code: "ECONNREFUSED", syscall: "connect", address, port: 443 });
+  const addresses = Array.from({ length: 8 }, (_, index) => refused(`192.0.2.${index + 1}`));
+  const denied = Object.assign(new Error("denied"), { code: "EACCES", syscall: "connect", address: "192.0.2.9", port: 443 });
+
+  const permanent = describeRelayFailure(
+    Object.assign(new AggregateError([...addresses, denied]), { code: "ECONNREFUSED" }),
+    "connect",
+  );
+  assert.equal(permanent.failure.causes.length, 8);
+  assert.equal(permanent.unsent, false);
+
+  const transient = describeRelayFailure(
+    Object.assign(new AggregateError([...addresses, refused("192.0.2.9")]), { code: "ECONNREFUSED" }),
+    "connect",
+  );
+  assert.equal(transient.failure.causes.length, 8);
+  assert.equal(transient.unsent, true);
 });
 
 test("Pi retries the note and does not read it as context overflow", () => {
@@ -150,5 +176,5 @@ test("the retry after a 401 authentication error can fail unsent", async (t) => 
   assert.equal(relay.admitted, 2);
   assert.equal(relay.status, null);
   assert.equal(relay.failure?.code, "ECONNREFUSED");
-  assert.equal(isUnsentFailure(relay.failure!), true);
+  assert.equal(relay.unsentFailure, true);
 });
