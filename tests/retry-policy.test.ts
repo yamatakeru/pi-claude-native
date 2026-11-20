@@ -88,9 +88,8 @@ test("#106 Pi retries a reset after the request was sent", async (t) => {
   assert.notEqual(relay.failure?.phase, "connect");
   assert.equal(relay.unsentFailure, false);
   assert.equal(text.includes(UNSENT_FAILURE_NOTE), false);
-  // Pi decides retries for every provider (ADR 0004). From Pi 1.6.0 its
-  // classifier retries the bare socket code, as it retries the same drop
-  // from its own Anthropic provider.
+  // A post-send failure gets no mark, and Pi's policy decides (ADR 0004).
+  // From Pi 1.6.0 its classifier retries the bare socket code.
   assert.equal(isRetryableAssistantError(failed(text)), true, text);
 });
 
