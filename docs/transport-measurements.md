@@ -294,3 +294,11 @@ All three requests succeeded and admitted exactly one upstream request each. Pi 
 The restarted process opened a new HTTPS connection but still read 99.84% of input from the API cache. This verifies that prompt-cache reuse survives a Pi restart under these stable inputs; it does not depend on keeping the old connection or Pi process alive.
 
 Cache hits do not guarantee lower latency. The same-process warm request waited 3,944.553 ms for response headers, despite 99.69% cache-read share. These three timings are not a controlled latency comparison. Legitimate instruction or tool changes, cache lifetime expiry, and upstream eviction can still prevent reuse.
+
+## Connect failures within a second (#101)
+
+Four calls on 2026-11-18 and 2026-11-19 failed before sending, each with `AggregateError ETIMEDOUT during connect [ETIMEDOUT connect 160.79.104.10:443; EHOSTUNREACH connect [2607:6bc0::10]:443]`. In the subagent transcripts, each error came 0.82 to 1.11 seconds after the previous message, including the start of the Claude Code child. That rules out a kernel TCP connect timeout, which takes about 75 seconds on macOS, and the relay's 180-second timeout. The machine had no IPv6 default route, and its IPv4 traffic went through a VPN tunnel.
+
+Node's `autoSelectFamilyAttemptTimeout`, 250 ms by default, explains the timing. A local reproduction on macOS with Node 24.22.3 resolved a host to `127.0.0.2`, which drops SYNs there, and `::1`, which refuses. Node abandoned the IPv4 attempt at 256 ms, recording `ETIMEDOUT`. The IPv6 attempt was refused at once, and the connection failed with the same `AggregateError` shape at 257 ms. With the relay's agents and their 2-second setting, the same resolution failed at 2,010 ms over HTTP and 2,011 ms over HTTPS. That shows the setting reaches both agents' connections.
+
+Not measured: the IPv4 handshake time on the failing network, and whether 2 seconds was enough there. The VPN on the test machine terminates TCP locally, so a slow handshake that eventually succeeds could not be reproduced. See [architecture.md](architecture.md) for the reasoning behind 2 seconds.
