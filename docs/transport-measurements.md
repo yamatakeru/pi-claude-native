@@ -302,3 +302,25 @@ Four calls on 2026-11-18 and 2026-11-19 failed before sending, each with `Aggreg
 Node's `autoSelectFamilyAttemptTimeout`, 250 ms by default, explains the timing. A local reproduction on macOS with Node 24.22.3 resolved a host to `127.0.0.2`, which drops SYNs there, and `::1`, which refuses. Node abandoned the IPv4 attempt at 256 ms, recording `ETIMEDOUT`. The IPv6 attempt was refused at once, and the connection failed with the same `AggregateError` shape at 257 ms. With the relay's agents and their 2-second setting, the same resolution failed at 2,010 ms over HTTP and 2,011 ms over HTTPS. That shows the setting reaches both agents' connections.
 
 Not measured: the IPv4 handshake time on the failing network, and whether 2 seconds was enough there. The VPN on the test machine terminates TCP locally, so a slow handshake that eventually succeeds could not be reproduced. See [architecture.md](architecture.md) for the reasoning behind 2 seconds.
+
+## Whether Anthropic processes a request whose connection broke (#106)
+
+Pi 1.6.0 retries a relay failure after the request was sent ([ADR 0004](adr/0004-pi-owns-retries.md)). Whether Anthropic still processed the broken request was measured on 2026-11-20 (UTC), with prompt caching as the signal. A loopback proxy sat between the relay and `api.anthropic.com` (`PI_CLAUDE_NATIVE_TEST_UPSTREAM=1`) and cut only the first Messages request. Pi's auto-retry then sent the same request again, unmodified. Each run used installed Pi 1.6.0 and Claude Code 2.1.327, Claude Opus 5.5 at low effort, no tools, and a new prompt of about 24,000 tokens of random filler with a unique nonce, asking for `OK`. When Anthropic finishes reading a request's input, it writes that input to the cache, and the retry then reads it instead of writing it.
+
+| Where the first request was cut | Error Pi saw | Retry cache read | Retry cache write | Retry found the cut request's input |
+|---|---|---:|---:|---|
+| Not cut (control, no retry; its own request) | none | 0 | 26,928 | yes |
+| Reset right after the body was written | `ECONNRESET during request` | 2,653 | 24,336 | no |
+| Reset 200 ms after sending, before response headers | `ECONNRESET during request` | 2,653 | 24,258 | no |
+| Reset 1,000 ms after sending, before response headers | `ECONNRESET during request` | 2,653 | 24,275 | no |
+| Reset right after the body was written; retry about 22 s later | `ECONNRESET during request` | 2,653 | 24,270 | no |
+| Reset 1,000 ms after sending, before response headers; retry about 22 s later | `ECONNRESET during request` | 2,653 | 24,276 | no |
+| Reset on response headers | `ECONNRESET during request` | 26,905 | 0 | yes |
+| Reset after the first text delta | `status 200`, `ECONNRESET during response` | 26,938 | 0 | yes |
+| Relay side reset 200 ms after sending; Anthropic side kept open and unread | `ECONNRESET during request` | 26,966 | 0 | yes |
+
+Response headers came 1.5 to 2.3 seconds after sending. The 2,653 cache-read tokens are the shared system prompt, which the control wrote. Without a delay, Pi's retry reached Anthropic about 2.5 seconds after the cut. For the two delayed rows the proxy held the first retry for 20 seconds; Anthropic closed that idle connection, and Pi's second retry, about 22 seconds after the cut, is the one shown. In the last row Anthropic answered the cut request with status 200 and a request id, as if nothing had happened, and its response had started before the retry was sent.
+
+In these runs the outcome depended on whether Anthropic saw the connection close. When it did before the response started, no retry found the cut request's input, even 22 seconds later, long after the response would have started. So Anthropic most likely stopped the request; whether it kept a partial record was not measured. When the network failed silently, as with the `read ETIMEDOUT` that led to #106, or the connection closed after the response started, Anthropic processed the request, and the retry duplicated it, reading the input from the cache instead of processing it again. A retry sent before the cut request's response starts, for example after a long prefill, would not find the cache entry, and both requests would process the input.
+
+Not measured: whether plan usage counts these requests. The `anthropic-ratelimit-unified-5h-utilization` header has two decimals and rose from 0.21 to 0.23 during the runs while other sessions shared the account, so no single request can be told apart. Each case ran once, with a 4-token answer and Claude Opus 5.5 only; how far generation continues after a close during a long answer was not measured.
