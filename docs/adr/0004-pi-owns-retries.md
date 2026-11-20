@@ -6,7 +6,7 @@ Pi's auto-retry decides from the error text alone. Its classifier first checks p
 
 - **The provider states facts Pi cannot know, in its classifier's vocabulary, and leaves policy to Pi.** The unsent note (`[upstream connect failed before the request was sent]`) says nothing reached Anthropic, so Pi retries it, also on Pi before 1.6.0 and for codes Pi does not list. A usage-credit error says `billing`, so Pi never retries it.
 - **Failures after the request was sent get no mark.** Pi's classifier already has a policy for this kind of failure: it retries a reply dropped after it began (`cut short after the reply had begun`, `stream ended before message_stop`, `terminated`) for every provider. The relay knows the phase as well, but that does not change what a duplicate costs, which is the same kind of cost as with any provider. Whether to accept it is the user's policy, set with Pi's auto-retry.
-- **Marks are set in the provider's completion gate** (`src/completion.ts`), which every call passes, including compaction, branch summaries, and side requests from other extensions.
+- **Marks are set in the provider**, where every call runs, including compaction, branch summaries, and side requests from other extensions. Upstream failures are worded in the completion gate (`src/completion.ts`). Claude Code timeouts are raised earlier, in the child supervisor (`src/process.ts`), so a mark on every post-send failure would have to cover both.
 - **A structured retryability field in Pi would replace text matching.** It is not requested; Claude Native adopts it if Pi adds one.
 
 ## Considered options
