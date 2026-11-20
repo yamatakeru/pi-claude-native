@@ -2,6 +2,15 @@
 
 Pi shows the entries newer than the last version it saw on the first fresh launch after an update. The [release notes](https://github.com/yamatakeru/pi-claude-native/releases) start from the same text and add details and how to pin a release.
 
+## [0.9.3] - 2026-11-20
+
+Calls on a poor network connection now recover on their own instead of failing.
+
+### Fixed
+
+- The relay gives each address of `api.anthropic.com` 2 seconds to connect, instead of Node's 250 ms. When IPv4 connected slowly and IPv6 was unreachable, calls failed within a second with `AggregateError ETIMEDOUT during connect` ([#101](https://github.com/yamatakeru/pi-claude-native/issues/101), [#104](https://github.com/yamatakeru/pi-claude-native/pull/104)).
+- Pi's auto-retry now retries a connection that failed before the request was sent. Its error ends with `[upstream connect failed before the request was sent]`. A connection that breaks after the request was sent is still not retried, because Anthropic may already be generating and a retry could use your plan twice. A timeout is the exception, because a silent connection is already dead. Error responses from Anthropic, such as overloaded or server errors, are retried as before ([#99](https://github.com/yamatakeru/pi-claude-native/issues/99), [#100](https://github.com/yamatakeru/pi-claude-native/issues/100), [#102](https://github.com/yamatakeru/pi-claude-native/pull/102), [#104](https://github.com/yamatakeru/pi-claude-native/pull/104)).
+
 ## [0.9.2] - 2026-11-13
 
 Pi's cache warming now follows the 1-hour prompt cache Claude Code writes, a revoked access token recovers without starting Claude Code by hand, and error messages say what to do next.
