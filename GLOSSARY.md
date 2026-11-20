@@ -25,6 +25,12 @@ The request path for other models, where all system messages are merged into one
 **Replay adjustment**:
 A change the replay makes to the history under the input contract, such as replaying a tool call as text, omitting a turn, or adding a missing tool result. Each one is recorded in the request's diagnostics.
 
+## Relay
+
+**Unsent failure**:
+A transient connection failure before any part of the request reached Anthropic. Pi may retry it, because no output was generated and no plan allowance was used.
+_Avoid_: connect failure, pre-send failure
+
 ## Tools
 
 **Declared tools**:

@@ -11,6 +11,7 @@ npm test
 Run it on Node 22. The suite uses `node:test` and needs no subscription credentials. It covers contracts that the installed-Pi harness cannot guard cheaply:
 
 - The admission relay forwards one upstream Messages request and rejects a second locally, including the tool-change beta and request rewrite. After a 401 authentication error it forwards one retry and reports only that attempt; other failures and a second 401 stay denied.
+- An unsent failure, a transient connection error before the request is sent, ends with a note that Pi's own retry classifier accepts. TLS errors, unknown codes, local aborts, and failures after the request is sent keep their text.
 - The signed-thinking carrier restores only while the visible projection matches.
 - Backend overrides are rejected and API credentials are left out of the Claude Code environment without the test bypass.
 - The usage-credit guard stops an overage turn, permits it with `PI_CLAUDE_NATIVE_ALLOW_USAGE_CREDITS=1`, and marks the error non-retryable.

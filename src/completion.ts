@@ -18,7 +18,7 @@ import type {
   Model,
   ToolCall,
 } from "@earendil-works/pi-ai/compat";
-import { formatRelayFailure, type AdmissionRelay } from "./admission.js";
+import { formatRelayFailure, isUnsentFailure, type AdmissionRelay } from "./admission.js";
 import { enforceUsageCredits, usageCreditsRejectionError } from "./billing.js";
 import {
   ClaudeNativeError,
@@ -37,6 +37,13 @@ import type {
   NativeResultLine,
   NativeUsage,
 } from "./types.js";
+
+/**
+ * Ends the error of an unsent failure. Pi retries errors whose text matches
+ * its transient-failure patterns, here `upstream connect`; it does not read
+ * the meta diagnostic.
+ */
+export const UNSENT_FAILURE_NOTE = " [upstream connect failed before the request was sent]";
 
 /** The response the gate accepted. */
 export interface GatedResponse {
@@ -106,7 +113,8 @@ export function gateResponse(options: {
         `, native retries denied: ${relay.denied}` +
         (relay.errorText() ? `, upstream said: ${relay.errorText().slice(0, 500)}` : "") +
         (nativeErrorText ? `: ${nativeErrorText}` : "") +
-        (results.length !== 1 ? `; native result lines: ${results.length}${childDetail}` : ""),
+        (results.length !== 1 ? `; native result lines: ${results.length}${childDetail}` : "") +
+        (relay.failure && isUnsentFailure(relay.failure) ? UNSENT_FAILURE_NOTE : ""),
     );
   }
   const result = results[0];

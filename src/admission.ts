@@ -295,6 +295,36 @@ function describeRelayFailure(error: unknown, phase: RelayFailurePhase): RelayFa
   };
 }
 
+/** Message of the relay's own upstream timeout. */
+const UPSTREAM_TIMEOUT = "Upstream request timed out";
+
+/** Socket and DNS error codes of a connection attempt that may succeed later. */
+const TRANSIENT_CONNECT_CODES = new Set([
+  "ETIMEDOUT",
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EAI_AGAIN",
+  "ENOTFOUND",
+]);
+
+/**
+ * True for an unsent failure: a transient error while connecting, before any
+ * request bytes reached upstream. TLS, configuration, unknown and local
+ * errors are excluded, and an `AggregateError` counts only when every address
+ * failed transiently.
+ */
+export function isUnsentFailure(failure: RelayFailure): boolean {
+  if (failure.phase !== "connect") return false;
+  if (failure.name === "RelayError") return failure.message === UPSTREAM_TIMEOUT;
+  const transient = (code: string | null): boolean => code !== null && TRANSIENT_CONNECT_CODES.has(code);
+  if (failure.causes.length === 0) return transient(failure.code);
+  // An `AggregateError` may carry no code of its own; each address must have one.
+  return (failure.code === null || transient(failure.code)) &&
+    failure.causes.every((cause) => transient(cause.code));
+}
+
 /** One-line form for error messages, e.g. `AggregateError ECONNREFUSED during connect [...]`. */
 export function formatRelayFailure(failure: RelayFailure): string {
   const endpoint = ({ address, port }: RelayFailureCause): string => {
@@ -586,7 +616,7 @@ export class AdmissionRelay {
       let settled = false;
       let responseEnded = false;
       const onTimeout = (): void => {
-        upstream.destroy(new RelayError("Upstream request timed out"));
+        upstream.destroy(new RelayError(UPSTREAM_TIMEOUT));
       };
       const finish = (error?: Error): void => {
         if (settled) return;
