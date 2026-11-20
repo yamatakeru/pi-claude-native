@@ -24,6 +24,16 @@ import { upstreamAgent } from "./upstream-agent.js";
 const ERROR_BODY_CAP = 64 * 1024;
 const REQUEST_BODY_CAP = 512 * 1024 * 1024;
 
+/** Blank line ending an SSE frame. Not global, so `exec` always searches from the start. */
+const FRAME_END = /\r?\n\r?\n/;
+
+/** Block field each streamed text-like delta appends to. */
+const DELTA_FIELDS = new Map<unknown, "text" | "thinking" | "signature">([
+  ["text_delta", "text"],
+  ["thinking_delta", "thinking"],
+  ["signature_delta", "signature"],
+]);
+
 /** Reconstructed upstream assistant message from the SSE stream. */
 export class SseCapture {
   message: NativeAssistantMessage | null = null;
@@ -42,11 +52,9 @@ export class SseCapture {
 
   feed(chunk: Buffer): void {
     this.pending += this.decoder.decode(chunk, { stream: true });
-    let index: number;
-    while ((index = this.pending.search(/\r?\n\r?\n/)) !== -1) {
-      const frame = this.pending.slice(0, index);
-      const match = /\r?\n\r?\n/.exec(this.pending);
-      this.pending = this.pending.slice(index + (match?.[0].length ?? 2));
+    for (let match = FRAME_END.exec(this.pending); match; match = FRAME_END.exec(this.pending)) {
+      const frame = this.pending.slice(0, match.index);
+      this.pending = this.pending.slice(match.index + match[0].length);
       const data = frame
         .split("\n")
         .filter((line) => line.startsWith("data:"))
@@ -106,14 +114,7 @@ export class SseCapture {
     if (!block || !isRecord(delta)) {
       return;
     }
-    const field =
-      delta["type"] === "text_delta"
-        ? "text"
-        : delta["type"] === "thinking_delta"
-          ? "thinking"
-          : delta["type"] === "signature_delta"
-            ? "signature"
-            : undefined;
+    const field = DELTA_FIELDS.get(delta["type"]);
     if (field) {
       block[field] = `${block[field] ?? ""}${delta[field] ?? ""}`;
     } else if (delta["type"] === "input_json_delta") {
@@ -216,10 +217,11 @@ export function parseUpstream(raw: string): UpstreamTarget {
       "Native upstream must be HTTPS or a loopback HTTP fixture",
     );
   }
+  const defaultPort = url.protocol === "https:" ? 443 : 80;
   return {
     scheme: url.protocol as "https:" | "http:",
     host: url.hostname,
-    port: url.port ? Number(url.port) : url.protocol === "https:" ? 443 : 80,
+    port: url.port ? Number(url.port) : defaultPort,
     path: url.pathname.replace(/\/$/, ""),
   };
 }
@@ -776,8 +778,8 @@ export class AdmissionRelay {
         };
         if (upstream.reusedSocket) connected();
         else if (this.target.scheme === "https:") socket.once("secureConnect", connected);
-        else if (!socket.connecting) connected();
-        else socket.once("connect", connected);
+        else if (socket.connecting) socket.once("connect", connected);
+        else connected();
       });
       upstream.once("timeout", onTimeout);
       upstream.on("error", finish);
