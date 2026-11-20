@@ -2,6 +2,14 @@
 
 Pi shows the entries newer than the last version it saw on the first fresh launch after an update. The [release notes](https://github.com/yamatakeru/pi-claude-native/releases) start from the same text and add details and how to pin a release.
 
+## [0.9.4] - 2026-11-21
+
+On Pi 1.6.0, a connection that breaks after the request was sent is now retried. This release documents why and how to turn it off.
+
+### Changed
+
+- Pi 1.6.0 retries Claude Native's errors that name a socket code, such as `ECONNRESET` or `ETIMEDOUT`, including a connection that broke after the request was sent. 0.9.3 said such a connection is not retried; on Pi 1.6.0 it is, the same as with Pi's own Anthropic provider. Claude Native now leaves this decision to Pi instead of wording errors to avoid it. A retry never runs a tool twice. If Anthropic had already started on the broken request, the retry can use your plan twice. To avoid such retries, set `retry.enabled` to `false` in Pi's settings. The decision and the measurements are in [ADR 0004](docs/adr/0004-pi-owns-retries.md) ([#106](https://github.com/yamatakeru/pi-claude-native/issues/106), [#107](https://github.com/yamatakeru/pi-claude-native/pull/107), [#108](https://github.com/yamatakeru/pi-claude-native/pull/108)).
+
 ## [0.9.3] - 2026-11-20
 
 Calls on a poor network connection now recover on their own instead of failing.
