@@ -29,18 +29,15 @@ async function gatedError(upstream: Server, timeoutMs: number): Promise<{ relay:
   );
   await new Promise<void>((resolve) => {
     const req = request(`${relay.url}/v1/messages`, { method: "POST" }, (res) => {
-      res.resume();
-      res.on("end", resolve);
-      res.on("error", () => resolve());
+      res.resume().on("close", resolve);
     });
     req.on("error", () => resolve());
     req.end("{}");
   });
-  const native = { results: [], assistants: [], nativeErrorText: "" } as unknown as NativeOutput;
   try {
     gateResponse({
       relay,
-      native,
+      native: { results: [], assistants: [], nativeErrorText: "" } as unknown as NativeOutput,
       exitCode: 0,
       childDetail: "",
       model: nativeModel(),
@@ -56,8 +53,10 @@ async function gatedError(upstream: Server, timeoutMs: number): Promise<{ relay:
 test("#100 Pi retries the relay's timeout after the request was sent", async (t) => {
   // Accepts the request and never answers: the relay's idle timeout fires.
   const silent = createServer(() => {});
-  t.after(() => silent.closeAllConnections());
-  t.after(() => silent.close());
+  t.after(() => {
+    silent.closeAllConnections();
+    silent.close();
+  });
   const { relay, text } = await gatedError(silent, 200);
   t.after(() => relay.close());
 
